@@ -37,7 +37,7 @@ def read_gene_list(path: Path) -> List[str]:
     Returns:
         List of gene identifiers (stripped, non-empty).
     """
-    # Read file, strip whitespace, ignore empty lines.
+    # Read file once, drop newline characters, remove blanks, and return clean IDs for downstream lookup.
     return [line.strip() for line in path.read_text().splitlines() if line.strip()]
 
 
@@ -61,24 +61,25 @@ def compute_module_scores(
     Returns:
         DataFrame: gene sets as rows, samples as columns.
     """
-    # Calculate per-sample mean for centering (if requested).
+    # Calculate per-sample mean for centering (if requested) so each score reflects deviation from overall expression.
     background_mean = expr.mean(axis=0) if center else 0
 
-    scores = {}  # Store module scores for each gene set.
+    # Store module scores for each gene set in a dict that we later convert to a DataFrame.
+    scores = {}
 
     for name, genes in gene_sets.items():
-        # Filter to genes present in the expression matrix.
+        # Filter the list to genes present in the expression matrix so we do not select missing rows.
         present = [g for g in genes if g in expr.index]
         if not present:
             raise ValueError(f"No genes from set '{name}' were found in the matrix.")
 
-        # Mean expression per sample for this gene set.
+        # Mean expression per sample for this gene set computed across all available genes.
         gene_mean = expr.loc[present].mean(axis=0)
 
         # Center by subtracting background mean if requested.
         scores[name] = gene_mean - background_mean
 
-    # Return scores as DataFrame (gene sets x samples).
+    # Return scores as DataFrame (gene sets x samples) for easy downstream export/plotting.
     return pd.DataFrame(scores).T
 
 
@@ -94,10 +95,10 @@ def plot_heatmap(scores: pd.DataFrame, output: Path) -> None:
     # Create figure for heatmap.
     plt.figure(figsize=(8, 6))
 
-    # Center colormap at zero for visualizing up/down regulation.
+    # Center colormap at zero for visualizing up/down regulation and annotate exact values.
     sns.heatmap(scores, cmap="vlag", center=0, annot=True, fmt=".2f")
 
-    # Adjust layout and save image.
+    # Adjust layout to avoid clipped labels and save the figure to disk.
     plt.tight_layout()
     plt.savefig(output, dpi=300)
     plt.close()
@@ -138,10 +139,12 @@ def main() -> None:
     """
     Main entry point: parse arguments, load data, compute scores, and save outputs.
     """
+    # Parse all CLI arguments once at start to capture configuration.
     args = parse_args()
 
     # Load VST expression matrix (genes x samples).
     expr = pd.read_csv(args.vst, sep="\t")
+    # Ensure the requested gene identifier column exists before reindexing.
     if args.gene_column not in expr.columns:
         raise ValueError(f"Column '{args.gene_column}' not found in VST file: {args.vst}")
 
@@ -153,6 +156,7 @@ def main() -> None:
 
     # Compute module scores (mean VST per gene set, per sample).
     scores = compute_module_scores(expr, gene_sets, center=not args.no_center)
+    # Persist scores as TSV so downstream analyses can reuse them.
     scores.to_csv(args.output, sep="\t")
 
     # Optionally plot heatmap if requested.
