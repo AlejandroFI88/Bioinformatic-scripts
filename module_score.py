@@ -26,12 +26,20 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-def read_gene_list(path: Path) -> List[str]:
-    """Read a plain-text gene list (one gene per line)."""
 
-    # Strip whitespace and ignore empty lines so downstream calculations only
-    # receive valid identifiers.
+def read_gene_list(path: Path) -> List[str]:
+    """
+    Read a plain-text gene list (one gene per line).
+
+    Args:
+        path: Path to the gene list file.
+
+    Returns:
+        List of gene identifiers (stripped, non-empty).
+    """
+    # Read file, strip whitespace, ignore empty lines.
     return [line.strip() for line in path.read_text().splitlines() if line.strip()]
+
 
 
 def compute_module_scores(
@@ -39,60 +47,70 @@ def compute_module_scores(
     gene_sets: dict[str, list[str]],
     center: bool = True,
 ) -> pd.DataFrame:
-    """Compute module scores for each gene set.
+    """
+    Compute module scores for each gene set.
+
+    For each gene set, calculate the mean VST expression per sample, optionally
+    subtracting the global mean expression for centering.
 
     Args:
-        expr: Expression matrix indexed by gene with samples in columns.
-        gene_sets: Mapping of gene set name to list of genes.
-        center: If True, subtract the global mean expression per sample.
+        expr: Expression matrix indexed by gene, columns are samples.
+        gene_sets: Dict mapping gene set name to list of gene IDs.
+        center: If True, subtract global mean per sample.
 
     Returns:
-        DataFrame with gene sets as rows and samples as columns.
+        DataFrame: gene sets as rows, samples as columns.
     """
-    # Global per-sample mean that will be subtracted from each gene set if
-    # centering is requested. Using 0 when `center` is False keeps the code
-    # simple without an additional branch later.
+    # Calculate per-sample mean for centering (if requested).
     background_mean = expr.mean(axis=0) if center else 0
 
-    # Collect the mean for each gene set in a dictionary keyed by gene set name.
-    scores = {}
+    scores = {}  # Store module scores for each gene set.
 
     for name, genes in gene_sets.items():
-        # Only keep genes that are present in the expression matrix. This keeps
-        # the script robust to mismatched identifiers between VST and lists.
+        # Filter to genes present in the expression matrix.
         present = [g for g in genes if g in expr.index]
         if not present:
             raise ValueError(f"No genes from set '{name}' were found in the matrix.")
 
-        # Compute the per-sample mean for the genes found in the list.
+        # Mean expression per sample for this gene set.
         gene_mean = expr.loc[present].mean(axis=0)
 
-        # Subtract the background mean (or 0) to center values if requested.
+        # Center by subtracting background mean if requested.
         scores[name] = gene_mean - background_mean
 
+    # Return scores as DataFrame (gene sets x samples).
     return pd.DataFrame(scores).T
 
 
+
 def plot_heatmap(scores: pd.DataFrame, output: Path) -> None:
-    """Save a clustered heatmap of module scores."""
-    # Create a new figure with a small, publication-friendly footprint.
+    """
+    Save a heatmap of module scores to file.
+
+    Args:
+        scores: DataFrame of module scores (gene sets x samples).
+        output: Path to save the heatmap image.
+    """
+    # Create figure for heatmap.
     plt.figure(figsize=(8, 6))
 
-    # `center=0` places white at zero to quickly highlight positive/negative
-    # deviations across samples.
+    # Center colormap at zero for visualizing up/down regulation.
     sns.heatmap(scores, cmap="vlag", center=0, annot=True, fmt=".2f")
 
-    # Avoid clipped labels and then write the image to disk.
+    # Adjust layout and save image.
     plt.tight_layout()
     plt.savefig(output, dpi=300)
     plt.close()
 
 
-def parse_args() -> argparse.Namespace:
-    """Configure the command-line interface and parse arguments."""
 
-    # All parameters are optional except the VST matrix and gene lists. Defaults
-    # are chosen to mimic the example provided in the script docstring.
+def parse_args() -> argparse.Namespace:
+    """
+    Set up and parse command-line arguments for the script.
+
+    Returns:
+        argparse.Namespace with parsed arguments.
+    """
     parser = argparse.ArgumentParser(description="Compute module scores from VST matrix and gene lists.")
     parser.add_argument("--vst", required=True, type=Path, help="Path to VST matrix (TSV with genes as rows).")
     parser.add_argument("--gene-lists", required=True, nargs="+", type=Path, help="Paths to gene list files.")
@@ -115,28 +133,30 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+
 def main() -> None:
+    """
+    Main entry point: parse arguments, load data, compute scores, and save outputs.
+    """
     args = parse_args()
 
-    # Load the VST matrix. It is expected to be a tab-separated file with genes
-    # as rows and samples in columns.
+    # Load VST expression matrix (genes x samples).
     expr = pd.read_csv(args.vst, sep="\t")
     if args.gene_column not in expr.columns:
         raise ValueError(f"Column '{args.gene_column}' not found in VST file: {args.vst}")
 
-    # Move the gene identifier column into the index to simplify lookups.
+    # Set gene column as index for easy lookup.
     expr = expr.set_index(args.gene_column)
 
-    # Read all provided gene lists into a dictionary using the stem of each file
-    # as the gene set name (e.g., `2c_UP.txt` -> `2c_UP`).
+    # Read gene lists, using file stem as set name.
     gene_sets = {path.stem: read_gene_list(path) for path in args.gene_lists}
 
-    # Compute module scores and write them to disk as a TSV.
+    # Compute module scores (mean VST per gene set, per sample).
     scores = compute_module_scores(expr, gene_sets, center=not args.no_center)
     scores.to_csv(args.output, sep="\t")
 
+    # Optionally plot heatmap if requested.
     if args.heatmap:
-        # Optionally render a small heatmap for a quick visual summary.
         plot_heatmap(scores, args.heatmap)
 
 
