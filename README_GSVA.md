@@ -9,7 +9,7 @@
 pip install gseapy
 ```
 
-### Usage
+### Usage (bulk RNA-seq)
 
 ```bash
 python3 module_score_gsva.py \
@@ -18,6 +18,21 @@ python3 module_score_gsva.py \
     --gene-column external_gene_name \
     --output scores_gsva.tsv \
     --heatmap scores_gsva_heatmap.png
+```
+
+For a Seurat-style module score on bulk data (AddModuleScore logic with
+expression-matched control genes), use the updated `module_score.py` script:
+
+```bash
+python3 module_score.py \
+    --vst condition_21mo_shNsun2_vs_21mo_shLuci.txt \
+    --gene-lists 2c_DOWN.txt 2c_UP.txt 7c_UP.txt 7c_DOWN.txt \
+    --gene-column external_gene_name \
+    --method seurat-like \
+    --bins 24 \
+    --seed 42 \
+    --output module_scores.tsv \
+    --heatmap module_scores_heatmap.png
 ```
 
 ## What is GSVA?
