@@ -7,25 +7,49 @@ This script calculates module scores from VST expression matrices and generates
 publication-ready visualizations similar to Seurat's AddModuleScore plots
 (e.g., Figure 3G/3H style from scRNA-seq papers).
 
-For bulk RNA-seq, we implement a Seurat-like approach:
-- Score = mean(genes in set) - mean(control genes matched by expression bin)
+Algorithm - Seurat AddModuleScore Adaptation for Bulk RNA-seq:
+    1. Bin all genes by average expression (default: 24 bins)
+    2. For each gene in the target set:
+       - Find its expression bin
+       - Sample control genes from the same bin (excluding target genes)
+    3. Calculate: Score = mean(target genes) - mean(control genes)
+    
+    Key Adaptation for Bulk vs scRNA-seq:
+    - Bulk RNA-seq (default): 1 control gene per target gene (1:1 ratio)
+    - scRNA-seq (Seurat): 100 control genes per target gene (100:1 ratio)
+    
+    The 1:1 ratio is more appropriate for Bulk RNA-seq because:
+    - Fewer samples (biological replicates) vs thousands of cells
+    - Less need for extensive control averaging
+    - Reduces risk of oversampling from limited gene pool
 
-Output visualizations:
-- Boxplots/Violin plots comparing module scores across conditions
+Output visualizations (similar to Figure 3G/3H from papers):
+- Boxplots/Violin plots comparing module scores across conditions (with statistics)
 - Heatmaps with hierarchical clustering
+- Bar plots with error bars (mean ± SEM)
 - Dot plots showing score magnitude and direction
 
 Usage:
-    python module_score_visualization.py \
+    # Basic usage with sample groups
+    python module_score_visualization_Opus.py \
         --vst condition_21mo_shNsun2_vs_21mo_shLuci.txt \
         --gene-lists 2c_DOWN.txt 2c_UP.txt 7c_UP.txt 7c_DOWN.txt \
         --gene-column external_gene_name \
         --sample-groups groups.txt \
-        --output-prefix module_scores
+        --output-prefix results/module_scores \
+        --plots boxplot heatmap
+
+    # Auto-infer groups from sample names
+    python module_score_visualization_Opus.py \
+        --vst expression_vst.txt \
+        --gene-lists pathway1.txt pathway2.txt \
+        --infer-groups \
+        --output-prefix results/figure3_style
 
 References:
     - Seurat AddModuleScore: Tirosh et al., Science (2016)
-    - GSVA: Hänzelmann et al., BMC Bioinformatics (2013)
+    - Paper example: Lu et al., Cell (2025) Figure 3G/3H
+    - GSVA alternative: Hänzelmann et al., BMC Bioinformatics (2013)
 """
 from __future__ import annotations
 
@@ -160,7 +184,7 @@ def compute_module_scores(
     method: str = "seurat-like",
     bins: int = 24,
     seed: int = 42,
-    ctrl_genes_per_gene: int = 100,
+    ctrl_genes_per_gene: int = 1,
 ) -> pd.DataFrame:
     """
     Compute module scores for each gene set.
@@ -168,15 +192,17 @@ def compute_module_scores(
     Methods:
     - ``seurat-like``: Seurat AddModuleScore-style with control genes sampled 
       from expression-matched bins. Score = mean(gene set) - mean(control genes).
+      For Bulk RNA-seq, uses 1:1 ratio (1 control per gene) vs scRNA-seq's 100:1.
     - ``mean``: Simple mean expression for the gene set minus global mean.
 
     Args:
         expr: Expression matrix indexed by gene, columns are samples.
         gene_sets: Dict mapping gene set name to list of gene IDs.
         method: Either ``"seurat-like"`` or ``"mean"``.
-        bins: Number of expression bins for control sampling.
+        bins: Number of expression bins for control sampling (default: 24, matching Seurat).
         seed: Random seed for reproducible control gene sampling.
-        ctrl_genes_per_gene: Number of control genes to sample per gene in set.
+        ctrl_genes_per_gene: Number of control genes per gene in set. 
+            For Bulk RNA-seq: 1 (default), For scRNA-seq: 100 (Seurat default).
 
     Returns:
         DataFrame: gene sets as rows, samples as columns.
@@ -216,12 +242,21 @@ def compute_module_scores(
         control_genes: List[str] = []
         for gene in present:
             bin_id = int(gene_bins[gene])
+            # Select control genes from same expression bin, excluding target genes
             candidates = [g for g in bin_to_genes[bin_id] if g not in present]
+            # If all genes in bin belong to the target set, fall back to the full bin
             if not candidates:
                 candidates = bin_to_genes[bin_id]
-            # Sample multiple control genes per gene (like Seurat)
+            
+            # Sample control genes: for Bulk RNA-seq, typically 1:1 ratio
+            # For scRNA-seq compatibility, can increase ctrl_genes_per_gene to 100
             n_sample = min(ctrl_genes_per_gene, len(candidates))
-            control_genes.extend(rng.choice(candidates, size=n_sample, replace=True))
+            if n_sample == 1:
+                # Optimized path for Bulk RNA-seq (default)
+                control_genes.append(rng.choice(candidates))
+            else:
+                # scRNA-seq style: sample multiple controls per gene
+                control_genes.extend(rng.choice(candidates, size=n_sample, replace=False))
 
         control_mean = expr.loc[control_genes].mean(axis=0)
         scores[name] = gene_mean - control_mean

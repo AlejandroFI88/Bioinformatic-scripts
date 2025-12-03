@@ -53,9 +53,13 @@ def read_gene_list(path: Path) -> List[str]:
 
 
 def _prepare_bins(expr: pd.DataFrame, bins: int) -> tuple[pd.Series, Dict[int, List[str]]]:
-    """Bin genes by average expression for Seurat-like control sampling."""
+    """Bin genes by average expression for Seurat-like control sampling.
+    
+    This mirrors Seurat's AddModuleScore binning strategy where genes are
+    grouped by expression level to select matched control genes.
+    """
     gene_means = expr.mean(axis=1)
-    # Use rank to avoid ties preventing bin creation
+    # Use rank to avoid ties preventing bin creation (similar to Seurat's cut_number)
     ranked = gene_means.rank(method="first")
     n_bins = min(bins, ranked.nunique())
     gene_bins = pd.qcut(ranked, q=n_bins, labels=False, duplicates="drop")
@@ -144,6 +148,7 @@ def compute_module_scores(
         control_genes: List[str] = []
         for gene in present:
             bin_id = int(gene_bins[gene])
+            # Select control genes from same expression bin, excluding target genes
             candidates = [g for g in bin_to_genes[bin_id] if g not in present]
             # If all genes in bin belong to the target set, fall back to the full bin
             if not candidates:
