@@ -187,7 +187,7 @@ def _prepare_bins(expr: pd.DataFrame, bins: int) -> Tuple[pd.Series, Dict[int, L
 
     bin_to_genes: Dict[int, List[str]] = {}
     for gene, bin_id in gene_bins.items():
-        bin_to_genes.setdefault(int(bin_id), []).append(gene)
+        bin_to_genes.setdefault(int(bin_id), []).append(str(gene))
 
     return gene_bins, bin_to_genes
 
@@ -286,7 +286,7 @@ def plot_module_boxplot(
     scores: pd.DataFrame,
     groups: pd.DataFrame,
     output: Path,
-    palette: Optional[Dict[str, str]] = None,
+    palette: Optional[Dict] = None,
     show_points: bool = True,
     figsize: Tuple[int, int] = (10, 6),
 ) -> None:
@@ -377,12 +377,14 @@ def plot_module_boxplot(
             
             # For very small samples (n<=2), use t-test but add warning
             if n1 <= 2 or n2 <= 2:
-                _, pval = stats.ttest_ind(g1, g2)
+                result = stats.ttest_ind(g1, g2)
+                pval = float(result[1])  # type: ignore
                 title_suffix = f'\n(p={pval:.3f}, n={n1},{n2})'
                 if n1 == 2 and n2 == 2:
                     title_suffix += ' ⚠️'
             else:
-                _, pval = stats.ttest_ind(g1, g2)
+                result = stats.ttest_ind(g1, g2)
+                pval = float(result[1])  # type: ignore
                 title_suffix = f'\n(p={pval:.2e})'
             
             # Add significance stars
@@ -412,7 +414,7 @@ def plot_module_violin(
     scores: pd.DataFrame,
     groups: pd.DataFrame,
     output: Path,
-    palette: Optional[Dict[str, str]] = None,
+    palette: Optional[Dict] = None,
     figsize: Tuple[int, int] = (10, 6),
 ) -> None:
     """
@@ -549,7 +551,7 @@ def plot_combined_barplot(
     scores: pd.DataFrame,
     groups: pd.DataFrame,
     output: Path,
-    palette: Optional[Dict[str, str]] = None,
+    palette: Optional[Dict] = None,
     figsize: Tuple[int, int] = (12, 6),
 ) -> None:
     """
@@ -603,7 +605,7 @@ def plot_combined_barplot(
             group_data['mean'],
             width,
             label=group,
-            color=palette.get(group, 'gray'),
+            color=palette.get(group, 'gray') if palette else 'gray',
             yerr=group_data['sem'],
             capsize=3,
         )
@@ -663,12 +665,14 @@ def plot_dotplot(
     # Create dot plot
     for i, gene_set in enumerate(gene_sets):
         for j, group in enumerate(groups_list):
-            score = pivot.loc[gene_set, group]
+            score_val = pivot.loc[gene_set, group]  # type: ignore
+            score = float(pd.to_numeric(score_val))
             # Size proportional to absolute score
             size = abs(score) * 200 + 50
             # Color based on direction
             color = 'red' if score > 0 else 'blue'
-            alpha = min(abs(score) / pivot.abs().values.max(), 1.0)
+            max_val = pivot.abs().values.max()  # type: ignore
+            alpha = min(abs(score) / float(pd.to_numeric(max_val)), 1.0)
             
             ax.scatter(j, i, s=size, c=color, alpha=max(0.3, alpha), edgecolors='black', linewidths=0.5)
     
