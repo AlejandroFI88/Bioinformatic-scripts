@@ -7,6 +7,12 @@ This script calculates module scores from VST expression matrices and generates
 publication-ready visualizations similar to Seurat's AddModuleScore plots
 (e.g., Figure 3G/3H style from scRNA-seq papers).
 
+Module Scores vs Pathway Scores:
+    - Module Score: Average expression of a gene set minus control genes
+    - Pathway Score: Statistical enrichment of a pathway (e.g., GSEA, GSVA)
+    
+This script calculates MODULE SCORES (expression-based, not enrichment).
+
 Algorithm - Seurat AddModuleScore Adaptation for Bulk RNA-seq:
     1. Bin all genes by average expression (default: 24 bins)
     2. For each gene in the target set:
@@ -42,14 +48,16 @@ Usage:
     # Auto-infer groups from sample names
     python module_score_visualization_Opus.py \
         --vst expression_vst.txt \
-        --gene-lists pathway1.txt pathway2.txt \
+        --gene-lists geneset1.txt geneset2.txt \
         --infer-groups \
         --output-prefix results/figure3_style
 
 References:
-    - Seurat AddModuleScore: Tirosh et al., Science (2016)
-    - Paper example: Lu et al., Cell (2025) Figure 3G/3H
-    - GSVA alternative: Hänzelmann et al., BMC Bioinformatics (2013)
+    - Module Scores: Seurat AddModuleScore, Tirosh et al., Science (2016)
+    - Paper example: Lu et al., Cell (2025) Figure 3G/3H used module scores
+    - Alternative (pathway enrichment): GSVA, Hänzelmann et al., BMC Bioinformatics (2013)
+    
+Note: For pathway enrichment analysis (not module scores), use GSEA or GSVA instead.
 """
 from __future__ import annotations
 

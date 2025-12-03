@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Simple module score calculation for VST expression matrices.
+"""Module score calculation for VST expression matrices.
+
+This script calculates MODULE SCORES (not pathway enrichment scores).
+Module scores measure the average expression of a gene set relative to
+control genes, as implemented in Seurat's AddModuleScore function.
 
 The script takes a VST expression table (genes x samples) and a set of
 plain-text gene lists (one gene per line). For each gene list it calculates a
