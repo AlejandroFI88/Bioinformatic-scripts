@@ -1,7 +1,0 @@
-sample_id	group
-sample1	shLuci
-sample2	shLuci
-sample3	shLuci
-sample4	shNsun2
-sample5	shNsun2
-sample6	shNsun2

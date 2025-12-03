@@ -35,6 +35,12 @@ Output visualizations (similar to Figure 3G/3H from papers):
 - Bar plots with error bars (mean ± SEM)
 - Dot plots showing score magnitude and direction
 
+Statistical Considerations:
+- Minimum 3 replicates per group recommended for robust statistics
+- With n=2: results are exploratory, p-values have limited power
+- Significance symbols: *** p<0.001, ** p<0.01, * p<0.05, (†) p<0.10, ns p≥0.10
+- ⚠️ symbol indicates very small sample size (n=2 per group)
+
 Usage:
     # Basic usage with sample groups
     python module_score_visualization_Opus.py \
@@ -365,14 +371,26 @@ def plot_module_boxplot(
         if len(unique_groups) == 2:
             g1 = data[data['group'] == unique_groups[0]]['module_score']
             g2 = data[data['group'] == unique_groups[1]]['module_score']
-            _, pval = stats.ttest_ind(g1, g2)
+            
+            # Check sample size and choose appropriate test
+            n1, n2 = len(g1), len(g2)
+            
+            # For very small samples (n<=2), use t-test but add warning
+            if n1 <= 2 or n2 <= 2:
+                _, pval = stats.ttest_ind(g1, g2)
+                title_suffix = f'\n(p={pval:.3f}, n={n1},{n2})'
+                if n1 == 2 and n2 == 2:
+                    title_suffix += ' ⚠️'
+            else:
+                _, pval = stats.ttest_ind(g1, g2)
+                title_suffix = f'\n(p={pval:.2e})'
             
             # Add significance stars
             sig = _get_significance_symbol(pval)
             y_max = data['module_score'].max()
             y_range = data['module_score'].max() - data['module_score'].min()
             ax.text(0.5, y_max + 0.1 * y_range, sig, ha='center', fontsize=12)
-            ax.set_title(f'{gene_set}\n(p={pval:.2e})', fontsize=11, fontweight='bold')
+            ax.set_title(f'{gene_set}{title_suffix}', fontsize=11, fontweight='bold')
         else:
             ax.set_title(gene_set, fontsize=11, fontweight='bold')
         
@@ -674,13 +692,19 @@ def plot_dotplot(
 
 
 def _get_significance_symbol(pval: float) -> str:
-    """Convert p-value to significance symbol."""
+    """Convert p-value to significance symbol.
+    
+    For small sample sizes (n=2), p-values tend to be higher,
+    so we also show marginal significance.
+    """
     if pval < 0.001:
         return '***'
     elif pval < 0.01:
         return '**'
     elif pval < 0.05:
         return '*'
+    elif pval < 0.10:
+        return '(†)'  # Marginal/trend
     else:
         return 'ns'
 
@@ -856,6 +880,16 @@ def main() -> None:
     group_counts = groups.groupby('group').size()
     print(f"  Groups: {dict(group_counts)}")
     
+    # Check for small sample sizes
+    min_samples = group_counts.min()
+    if min_samples <= 2:
+        print(f"\n  ⚠️  WARNING: Small sample size detected (n={min_samples})")
+        print(f"     - Statistical power is limited with n≤2 per group")
+        print(f"     - P-values should be interpreted with caution")
+        print(f"     - Consider these as exploratory/preliminary results")
+        if min_samples == 1:
+            print(f"     - Cannot perform statistical tests with n=1")
+    
     # Compute module scores
     print(f"\n🔬 Computing module scores (method: {args.method})...")
     scores = compute_module_scores(
@@ -870,6 +904,14 @@ def main() -> None:
     print(f"\n📈 Score summary:")
     print(f"  Mean ± SD: {scores.values.mean():.3f} ± {scores.values.std():.3f}")
     print(f"  Range: [{scores.values.min():.3f}, {scores.values.max():.3f}]")
+    
+    # Additional info for small sample sizes
+    if min_samples <= 2:
+        print(f"\n💡 Tips for n={min_samples} per group:")
+        print(f"  - Focus on effect size (magnitude of difference) over p-values")
+        print(f"  - Look for consistent direction across multiple gene sets")
+        print(f"  - Consider fold-change: |score_treatment - score_control|")
+        print(f"  - Use for hypothesis generation, validate with more samples")
     
     # Save scores
     output_prefix = Path(args.output_prefix)

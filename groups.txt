@@ -1,0 +1,5 @@
+sample_id	group
+21mo+shLuci_rep1	shLuci
+21mo+shLuci_rep2	shLuci
+21mo+shNsun2_rep1	shNsun2
+21mo+shNsun2_rep2	shNsun2
